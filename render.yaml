@@ -1,0 +1,54 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: ying-floral-db
+    env: docker
+    plan: free
+    dockerfilePath: ./my-medusa-store/Dockerfile
+    dockerContext: ./my-medusa-store
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ying-floral-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: STORE_CORS
+        value: "*"
+      - key: ADMIN_CORS
+        value: "*"
+      - key: AUTH_CORS
+        value: "*"
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+
+  # Next.js Frontend
+  - type: web
+    name: ying-floral-frontend
+    env: docker
+    plan: free
+    dockerfilePath: ./medusa-storefront/Dockerfile
+    dockerContext: ./medusa-storefront
+    envVars:
+      - key: NEXT_PUBLIC_MEDUSA_BACKEND_URL
+        fromService:
+          name: ying-floral-db
+          type: pserv
+          property: host
+      - key: NEXT_PUBLIC_BASE_URL
+        value: https://ying-floral-frontend.onrender.com
+      - key: NEXT_PUBLIC_DEFAULT_REGION
+        value: vn
+      - key: NEXT_PUBLIC_USE_MOCK_DATA
+        value: "false"
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: ying-floral-postgres
+    plan: free
+    databaseName: medusa
+    user: medusa 

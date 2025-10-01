@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ying-floral-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medusa}
+      POSTGRES_DB: ${POSTGRES_DB:-medusa-db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medusa"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ying-floral-network
+
+  # Medusa Backend
+  backend:
+    build:
+      context: ./my-medusa-store
+      dockerfile: Dockerfile
+    container_name: ying-floral-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-medusa}:${POSTGRES_PASSWORD:-medusa}@postgres:5432/${POSTGRES_DB:-medusa-db}
+      JWT_SECRET: ${JWT_SECRET:-supersecret-change-in-production}
+      COOKIE_SECRET: ${COOKIE_SECRET:-supersecret-change-in-production}
+      STORE_CORS: ${STORE_CORS:-http://localhost:8000,http://localhost:3000}
+      ADMIN_CORS: ${ADMIN_CORS:-http://localhost:7001,http://localhost:9000}
+      AUTH_CORS: ${AUTH_CORS:-http://localhost:7001,http://localhost:9000}
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./my-medusa-store/src:/app/src
+      - backend_uploads:/app/static
+    networks:
+      - ying-floral-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./medusa-storefront
+      dockerfile: Dockerfile
+    container_name: ying-floral-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_MEDUSA_BACKEND_URL: ${NEXT_PUBLIC_MEDUSA_BACKEND_URL:-http://backend:9000}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_DEFAULT_REGION: ${NEXT_PUBLIC_DEFAULT_REGION:-vn}
+      NEXT_PUBLIC_USE_MOCK_DATA: ${NEXT_PUBLIC_USE_MOCK_DATA:-false}
+      REVALIDATE_SECRET: ${REVALIDATE_SECRET:-supersecret}
+    ports:
+      - "8000:8000"
+    networks:
+      - ying-floral-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  ying-floral-network:
+    driver: bridge 
